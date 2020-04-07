@@ -1,3 +1,14 @@
 explanation for each functions:
 1.subset: check if every element in the first list belongs to the second list
-2.equal_sets: two sets are equal if they are 
+2.equal_sets: two sets are equal if they are subset of each other
+3.set_diff: check every element in the first set and select those which are not in the second set
+4.set_union: union a b = a appended by b-a
+5.set_intersecton: check every element in a and select those elements that are also in b
+6.computed_fixed_point: recursively compute f(x) until f(x) = x
+7.filter_reachable: This function consists of three steps:
+		    1. Take the list that consists of only the start symbol initially, go through the list of rules and find rules with LHS that is in the symbol list, and look at the RHS of the rule and add all nonterminal symbols into the symbol list. This is the recursive function get_reachable_symbols
+		    2. Repeat step 1 using current symbol list until the symbol list does not change. This is done by using the funcion computed_fixed_point.
+		    3. Using the final list of reachable_symbols, select the rules whose LHS are in the list of reachable symbols.
+
+other approaches I considered:
+when writing the filter_reachable function, I encountered the problem of keeping the rules unchanged in the return value of get_reachable_symbols, since it is a recursive function that only looks at the first rule in the rule list. I have thought about using a global variable but it is prohibited in this assignment. Hence I used a wrapper function which 'saves' the rule list and restore it when the get_reachable_symbols function returns.
