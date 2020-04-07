@@ -10,18 +10,18 @@ let my_set_union_test0 = equal_sets (set_union [] [1;3;5]) [1;3;5]
 let my_set_union_test1 = equal_sets (set_union [1;3;3] [1;3;5]) [1;3;5]
 let my_set_union_test2 = equal_sets (set_union [1;1;2;3;4] [1;3;5]) [1;3;2;4;5]
 
-let set_intersection_test0 = equal_sets (set_intersection [] [1;2;3]) []
-let set_intersection_test1 = equal_sets (set_intersection [1;2;3] [2;3;4]) [2;3]
-let set_intersection_test2 = equal_sets (set_intersection [1;2;3] [1;2;3]) [1;2;3]                         
+let my_set_intersection_test0 = equal_sets (set_intersection [] [1;2;3]) []
+let my_set_intersection_test1 = equal_sets (set_intersection [1;2;3] [2;3;4]) [2;3]
+let my_set_intersection_test2 = equal_sets (set_intersection [1;2;3] [1;2;3]) [1;2;3]                         
 let my_set_diff_test0 = equal_sets (set_diff [] [1;3;5]) []
 let my_set_diff_test1 = equal_sets (set_diff [1;2;3] [2;3;1]) []
 let my_set_diff_test2 = equal_sets (set_diff [3;4;4;5;1] [1;2;3]) [4;5]
 
-let computed_fixed_point_test0 =
+let my_computed_fixed_point_test0 =
   computed_fixed_point (=) (fun x -> x) 10 = 10
-let computed_fixed_point_test1 =
+let my_computed_fixed_point_test1 =
   computed_fixed_point (=) (fun x -> x/2) 1000000 = 0
-let computed_fixed_point_test2 =
+let my_computed_fixed_point_test2 =
   computed_fixed_point (fun x y -> x - y > 1000) (fun x -> x * 2) 1 = 1024
 
 type awksub_nonterminals =
