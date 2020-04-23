@@ -1,0 +1,57 @@
+Relationship between make_parser and make_matcher:
+In this project, I started with implementing the make_matcher, for which I
+created a helper function to expand each non-terminal symbols recursively.
+After finishing make_matcher, I started to write make_parser and noticed
+that I can trace rules that lead to a successful match. So I passed another
+parameter to the helper function to trace the rules: if this rule leads to
+successful match, then just append the rule to the start of the trace. So my
+recursive helper function returns two things: result of matching (None/Some)
+and trace (which is not useful if matching returns None). Then using the trace,
+I can construct a parse tree pretty easily (use and remove one rule whenever
+a nonterminal value is encountered). I would say that I use the matcher to
+implement the parser, since I use a side result (trace) from the matching
+process to construct the parse tree. I implemented these two functions in
+this way because I found matcher to be more straight forward, since it only
+needs to expand the start symbol to match the fragment. However, for parser
+it is more complicated since I not only need to find whether it could match
+the fragment, but also I need to record the rules that lead to successful
+matching and construct a parse tree from the record. So for me, matching is
+a one-step process and parsing is a two-step process, which consists of
+matching as its first step.
+
+Weakness in my solution:
+grammar that contains rules which repeat itself
+
+type nonterminal = Loop
+
+let test_grammar =
+  (Loop,
+   function
+   | Loop ->
+      [[N Loop];
+       [T "end"]])
+
+let test = ((make_matcher test_grammar accept_empty_suffix ["end"]) = Some [])
+
+In this case, the nonterminal 'Loop' can expand to itself. The expected
+outcome is matching Loop to the second rule. However, since the matcher
+looks through the rules from the first to the last, it will cause infinite
+recursion and the program will fail.
+
+This type of error maybe even harder to find if the loop does not only contain
+a single non-terminal symbol. Below is a loop of length 3.
+
+type nonterminal = Loop1 | Loop2 | Loop3
+
+let test_grammar =
+  (Loop1,
+   function
+   | Loop1 ->
+      [[N Loop2];
+       [T "end"]]
+   | Loop2 ->
+      [[N Loop3]]
+   | Loop3 ->
+      [[N Loop1]])
+
+     
