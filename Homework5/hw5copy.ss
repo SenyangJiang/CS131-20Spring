@@ -18,10 +18,10 @@
 ; then call compare-expr-helper
 ; "store" mapped elements in mappedx and mappedy
 ; x and y are modified
-(define (map-var-list x y dictx dicty head?)
+(define (map-var-list x y dictx dicty head? mappedx mappedy)
   (cond
     [(and (equal? x '()) (equal? y '()))
-     '() ]
+     '()]
     ; if (car x) and (car y) are not lists
     ; then map car x and car y
     [(and (not (list? x)) (not (list? y)))
@@ -31,7 +31,7 @@
      (combine-lambda-expr x y dictx dicty)]
     ; if the list start with quote, don't combine the lists
     [(or (quote? (car x)) (quote? (car y)))
-     (list 'if '% x y)]
+     ]
     ; otherwise split two lists into car and cdr, map recursively
     [#t (cons (map-var-list (car x) (car y) dictx dicty #t) (map-var-list (cdr x) (cdr y) dictx dicty #f))]))
 
@@ -44,11 +44,11 @@
               (combine-arg (cdr x) (cdr y)))]))
 
 (define (update-dict-statement x y dictx dicty)
-  ; first we create a entry for each bounded variable in the dictionary
+  ; first we create a entry for the bounded variable in the dictionary
   ; and then call map-var-list, which maps lists according to dictionary
   (cond
     [(and (empty? (car x)) (empty? (car y)))
-     (map-var-list (cadr x) (cadr y) dictx dicty #t)]
+     (map-var-list (cadr x) (cadr y) dictx dicty #t '() '())]
     [(equal? (caar x) (caar y))
      (update-dict-statement (cons (cdar x) (cdr x)) (cons (cdar y) (cdr y))
                             (dict-set dictx (caar x) (caar y))
@@ -59,12 +59,9 @@
     ))
 
 (define (combine-lambda-expr x y dictx dicty)
-  ; if different number of arguments, then don't combine
-  (if (equal? (length (cadr x)) (length (cadr y)))
-      (list (if (or (equal? 'λ (car x)) (equal? 'λ (car y))) 'λ 'lambda)
-            (combine-arg (cadr x) (cadr y))
-            (update-dict-statement (cdr x) (cdr y) dictx dicty))
-      (list 'if '% x y)))
+  (list (if (or (equal? 'λ (car x)) (equal? 'λ (car y))) 'λ 'lambda)
+        (combine-arg (cadr x) (cadr y))
+        (update-dict-statement (cdr x) (cdr y) dictx dicty)))
 
 (define (expr-compare-helper x y head?)
   (cond
