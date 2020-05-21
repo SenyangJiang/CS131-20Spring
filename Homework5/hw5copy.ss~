@@ -7,8 +7,8 @@
 (define (quote? x)
   (equal? 'quote x))
 
-(define (macro? x)
-  (member x '(if lambda λ quote)))
+(define (if? x)
+  (equal? 'if x))
 
 ; map a single variable x according to dict
 (define (map-var x dict)
@@ -18,7 +18,7 @@
 ; then call compare-expr-helper
 ; "store" mapped elements in mappedx and mappedy
 ; x and y are modified
-(define (map-var-list x y dictx dicty head?)
+(define (map-var-list x y dictx dicty head? mappedx mappedy)
   (cond
     [(and (equal? x '()) (equal? y '()))
      '()]
@@ -31,7 +31,7 @@
      (combine-lambda-expr x y dictx dicty)]
     ; if the list start with quote, don't combine the lists
     [(or (quote? (car x)) (quote? (car y)))
-     (list 'if '% x y)]
+     ]
     ; otherwise split two lists into car and cdr, map recursively
     [#t (cons (map-var-list (car x) (car y) dictx dicty #t) (map-var-list (cdr x) (cdr y) dictx dicty #f))]))
 
@@ -48,7 +48,7 @@
   ; and then call map-var-list, which maps lists according to dictionary
   (cond
     [(and (empty? (car x)) (empty? (car y)))
-     (map-var-list (cadr x) (cadr y) dictx dicty #t)]
+     (map-var-list (cadr x) (cadr y) dictx dicty #t '() '())]
     [(equal? (caar x) (caar y))
      (update-dict-statement (cons (cdar x) (cdr x)) (cons (cdar y) (cdr y))
                             (dict-set dictx (caar x) (caar y))
@@ -76,8 +76,8 @@
      (list 'if '% x y)]
     [(and head? (or (quote? (car x)) (quote? (car y))))
      (list 'if '% x y)]
-    [(and head? (or (and (macro? (car x)) (not (macro? (car y))))
-                    (and (macro? (car y)) (not (macro? (car x))))))
+    [(and head? (or (and (if? (car x)) (not (if? (car y))))
+                    (and (if? (car y)) (not (if? (car x))))))
      (list 'if '% x y)]
     [(and head? (lambda? (car x)) (lambda? (car y)))
      (combine-lambda-expr x y '() '())]
