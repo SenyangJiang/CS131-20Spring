@@ -59,9 +59,12 @@
     ))
 
 (define (combine-lambda-expr x y dictx dicty)
-  (list (if (or (equal? 'λ (car x)) (equal? 'λ (car y))) 'λ 'lambda)
-        (combine-arg (cadr x) (cadr y))
-        (update-dict-statement (cdr x) (cdr y) dictx dicty)))
+  ; if different number of arguments, then don't combine
+  (if (equal? (length (cadr x)) (length (cadr y)))
+      (list (if (or (equal? 'λ (car x)) (equal? 'λ (car y))) 'λ 'lambda)
+            (combine-arg (cadr x) (cadr y))
+            (update-dict-statement (cdr x) (cdr y) dictx dicty))
+      (list 'if '% x y)))
 
 (define (expr-compare-helper x y head?)
   (cond
