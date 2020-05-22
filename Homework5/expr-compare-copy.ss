@@ -7,8 +7,8 @@
 (define (quote? x)
   (equal? 'quote x))
 
-(define (if? x)
-  (equal? 'if x))
+(define (macro? x)
+  (member x '(if lambda λ quote)))
 
 ; map a single variable x according to dict
 (define (map-var x dict)
@@ -21,17 +21,18 @@
 (define (map-var-list x y dictx dicty head? mappedx mappedy)
   (cond
     [(and (equal? x '()) (equal? y '()))
-     '()]
+     (expr-compare-helper (reverse mappedx) (reverse mappedy) #t dictx dicty) ]
     ; if (car x) and (car y) are not lists
     ; then map car x and car y
-    [(and (not (list? x)) (not (list? y)))
-     (expr-compare-helper (map-var x dictx) (map-var y dicty) #t)]
-    ; if the head of a list is a lambda, then we need to handle the lambda expression recursively
-    [(and head? (lambda? (car x)) (lambda? (car y)))
-     (combine-lambda-expr x y dictx dicty)]
-    ; if the list start with quote, don't combine the lists
+    [(and (not (list? (car x))) (not (list? (car y))))
+     (map-var-list (cdr x) (cdr y) dictx dicty #f (cons (map-var (car x) dictx) mappedx) (cons (map-var (car y) dicty) mappedy))]
+    ; if the head of a list is a lambda
+    ; then don't touch the list for now (handled in expr-compare-helper)
+    [(and head? (lambda? (caar x)) (lambda? (caar y)))
+     (map-var-list (cdr x) (cdr y) dictx dicty #f (cons (car x) mappedx) (cons (car x) mappedy))]
+    ; if the list start with quote, don't map the lists
     [(or (quote? (car x)) (quote? (car y)))
-     ]
+     map-var-list (cdr x) (cdr y) dictx dicty #f (cons (car x) mappedx) (cons (car x) mappedy))]
     ; otherwise split two lists into car and cdr, map recursively
     [#t (cons (map-var-list (car x) (car y) dictx dicty #t) (map-var-list (cdr x) (cdr y) dictx dicty #f))]))
 
@@ -44,11 +45,11 @@
               (combine-arg (cdr x) (cdr y)))]))
 
 (define (update-dict-statement x y dictx dicty)
-  ; first we create a entry for the bounded variable in the dictionary
+  ; first we create a entry for each bounded variable in the dictionary
   ; and then call map-var-list, which maps lists according to dictionary
   (cond
     [(and (empty? (car x)) (empty? (car y)))
-     (map-var-list (cadr x) (cadr y) dictx dicty #t '() '())]
+     (map-var-list (cadr x) (cadr y) dictx dicty #t)]
     [(equal? (caar x) (caar y))
      (update-dict-statement (cons (cdar x) (cdr x)) (cons (cdar y) (cdr y))
                             (dict-set dictx (caar x) (caar y))
@@ -59,11 +60,14 @@
     ))
 
 (define (combine-lambda-expr x y dictx dicty)
-  (list (if (or (equal? 'λ (car x)) (equal? 'λ (car y))) 'λ 'lambda)
-        (combine-arg (cadr x) (cadr y))
-        (update-dict-statement (cdr x) (cdr y) dictx dicty)))
+  ; if different number of arguments, then don't combine
+  (if (equal? (length (cadr x)) (length (cadr y)))
+      (list (if (or (equal? 'λ (car x)) (equal? 'λ (car y))) 'λ 'lambda)
+            (combine-arg (cadr x) (cadr y))
+            (update-dict-statement (cdr x) (cdr y) dictx dicty))
+      (list 'if '% x y)))
 
-(define (expr-compare-helper x y head?)
+(define (expr-compare-helper x y head? dictx dicty)
   (cond
     ; handled all non-list cases
     [(equal? x y) x]
@@ -76,11 +80,11 @@
      (list 'if '% x y)]
     [(and head? (or (quote? (car x)) (quote? (car y))))
      (list 'if '% x y)]
-    [(and head? (or (and (if? (car x)) (not (if? (car y))))
-                    (and (if? (car y)) (not (if? (car x))))))
+    [(and head? (or (and (macro? (car x)) (not (macro? (car y))))
+                    (and (macro? (car y)) (not (macro? (car x))))))
      (list 'if '% x y)]
     [(and head? (lambda? (car x)) (lambda? (car y)))
-     (combine-lambda-expr x y '() '())]
+     (combine-lambda-expr x y dictx dicty)]
     [#t (cons (expr-compare-helper (car x) (car y) #t) (expr-compare-helper (cdr x) (cdr y) #f))]))
 
-(define (expr-compare x y) (expr-compare-helper x y #t))
+(define (expr-compare x y) (expr-compare-helper x y #t '() '()))
