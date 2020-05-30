@@ -26,85 +26,97 @@ class Server:
     def __del__(self):
         if (hasattr(self, 'log')):
             self.log.close()
-                    
-    async def parse_message(self, message):
-        message_list = [msg for msg in message.strip().split() if len(msg)]
-        cmd = message_list[0]
-        if (cmd == "IAMAT"):
-            if len(message_list) != 4:
-                return '? ' + message
-            client_id, coordinates, timestamp = message_list[1:]
-            # note that time difference can be negative due to clock skew
-            # hence added some formatting for the time diff
-            msg = f"AT {self.name} {time.time() - float(timestamp):+} {client_id} {coordinates} {timestamp}"
-            if (self.name not in Server.comm[msg]):
-                self.history[client_id] = msg
-                Server.comm[msg].add(self.name)
-                for friend in Server.friends[self.name]:
-                    try:
-                        reader, writer = await asyncio.open_connection(self.ip, Server.assigned_ports[friend])
-                        writer.write(msg.encode())
-                        await writer.drain()
-                        self.log.write(f"{self.name} PROPAGATE: {msg} TO {friend}\n")
-                        self.log.flush()
-                        writer.close()
-                    except ConnectionError:
-                        self.log.write(f"{friend} IS DOWN\n")
-                        self.log.flush()
-            return msg
-        elif (cmd == "WHATSAT"):
-            if len(message_list) != 4:
-                return '? ' + message
-            client_id, radius, max_results = message_list[1:]
-            if(float(radius) > 50 or int(max_results) > 20):
-                return '? ' + message
-            API_KEY = 'AIzaSyAA7gh9NBCnesxK1BgUUlW6tkksfxiktbw'
-            # obtain longtitude and latitude, parse into url
-            try:
-                msg = self.history[client_id]
-            except KeyError:
-                return '? ' + message
-            coordinates = msg.strip().split()[4]
-            st = {"+","-"}
-            ind = next((i for i, ch  in enumerate(coordinates[1:]) if ch in st),None)
-            latitude = coordinates[:ind+1]
-            longitude = coordinates[ind+1:]
-            loc = "{0},{1}".format(latitude, longitude)
-            url = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?key={0}&location={1}&radius={2}'.format(API_KEY, loc, radius)
-            # use Google API
-            async with aiohttp.ClientSession(
-                    connector=aiohttp.TCPConnector(
-                        ssl=False,
-                    ),
-            ) as session:
-                async with session.get(url) as resp:
-                    response = await resp.json()
-                    response['results'] = response['results'][:int(max_results)]
-                    google_api_feedback = json.dumps(response, indent=4)
-                    return msg + "\n" + google_api_feedback + "\n\n"
-        elif (cmd == "AT"):
-            # add to history and propagate if not already known
-            if len(message_list) != 6:
-                return '? ' + message
-            if (self.name not in Server.comm[message]):
-                client_id = message_list[3]
-                self.history[client_id] = message
-                Server.comm[message].add(self.name)
-                for friend in Server.friends[self.name]:
-                    try:
-                        reader, writer = await asyncio.open_connection(self.ip, Server.assigned_ports[friend])
-                        writer.write(message.encode())
-                        await writer.drain()
-                        self.log.write(f"{self.name} PROPAGATE: {message} TO {friend}\n")
-                        self.log.flush()
-                        writer.close()
-                    except ConnectionError:
-                        self.log.write(f"{friend} IS DOWN\n")
-                        self.log.flush()
-            return ''
-        else:
-            return '? ' + message
+
+    def write_to_log(self, msg):
+        self.log.write(msg)
+        self.log.flush()
+
+    # write message to client and close the socket
+    async def write_to_client(self, writer, msg):
+        writer.write(msg.encode())
+        await writer.drain()
+        self.write_to_log(f"{self.name} SENT: {msg} TO CLIENT\n")
+        writer.close()
         
+    # flood message to other servers
+    # add to history if not already known
+    async def flood(self, msg, client_id):
+        if (self.name in Server.comm[msg]):
+            self.write_to_log(f"REPEATED MESSAGE: {msg}\n")
+            return
+        
+        self.history[client_id] = msg
+        Server.comm[msg].add(self.name)
+        for friend in Server.friends[self.name]:
+            try:
+                reader, writer = await asyncio.open_connection(self.ip, Server.assigned_ports[friend])
+                self.write_to_log(f"{self.name} CONNECTED TO {friend}\n")
+                writer.write(msg.encode())
+                await writer.drain()
+                self.write_to_log(f"{self.name} PROPAGATE: {msg} TO {friend}\n")
+                writer.close()
+                self.write_to_log(f"{self.name} CLOSED CONNECTION TO {friend}\n")
+            except ConnectionError:
+                self.write_to_log(f"{self.name}: ERROR CONNECTING TO {friend}\n")
+
+    # fetch from google map
+    # return value is a JSON object
+    async def fetch(self, url):
+        # use Google API
+        async with aiohttp.ClientSession(
+                connector=aiohttp.TCPConnector(
+                    ssl=False,
+                ),
+        ) as session:
+            async with session.get(url) as resp:
+                return await resp.json()
+            
+    async def handle_i_am_at(self, writer, message_list, message):
+        if len(message_list) != 4:
+            await self.write_to_client(writer, '? ' + message)
+            return
+        client_id, coordinates, timestamp = message_list[1:]
+        # note that time difference can be negative due to clock skew
+        # hence added some formatting for the time diff
+        msg = f"AT {self.name} {time.time() - float(timestamp):+} {client_id} {coordinates} {timestamp}"
+        await self.write_to_client(writer, msg)
+        await self.flood(msg, client_id)
+    
+    async def handle_whats_at(self, writer, message_list, message):
+        if len(message_list) != 4:
+            await self.write_to_client(writer, '? ' + message)
+            return
+        client_id, radius, max_results = message_list[1:]
+        if(float(radius) > 50 or int(max_results) > 20):
+            await self.write_to_client(writer, '? ' + message)
+            return
+        API_KEY = 'AIzaSyAA7gh9NBCnesxK1BgUUlW6tkksfxiktbw'
+        # obtain longtitude and latitude, parse into url
+        try:
+            msg = self.history[client_id]
+        except KeyError:
+            self.write_to_log(f"{self.name}: {client_id} NOT FOUND IN HISTORY\n")
+            await self.write_to_client(writer, '? ' + message)
+        coordinates = msg.strip().split()[4]
+        st = {"+","-"}
+        ind = next((i for i, ch  in enumerate(coordinates[1:]) if ch in st),None)
+        latitude = coordinates[:ind+1]
+        longitude = coordinates[ind+1:]
+        loc = "{0},{1}".format(latitude, longitude)
+        url = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?key={0}&location={1}&radius={2}'.format(API_KEY, loc, radius)
+        response = await self.fetch(url)
+        response['results'] = response['results'][:int(max_results)]
+        google_api_feedback = json.dumps(response, indent=4)
+        await self.write_to_client(writer, msg + "\n" + google_api_feedback + "\n\n")
+        
+    async def handle_at(self, writer, message_list, message):
+        # add to history and propagate if not already known
+        if len(message_list) != 6:
+            await self.write_to_client(writer, '? ' + message)
+            return
+        client_id = message_list[3]
+        await self.flood(message, client_id)
+        writer.close()    
         
     async def handle_message(self, reader, writer):
         """
@@ -113,20 +125,19 @@ class Server:
         data = await reader.read(self.message_max_length)
         message = data.decode()
         addr = writer.get_extra_info('peername')
-        print("{} RECEIVED {} FROM {}".format(self.name, message, addr))
-        self.log.write("{} RECEIVED {} FROM {}\n".format(self.name, message, addr))
-        self.log.flush()
+        print(f"{self.name} RECEIVED {message} FROM {addr}")
+        self.write_to_log(f"{self.name} RECEIVED: {message}\n")
+        message_list = [msg for msg in message.strip().split() if len(msg)]
+        cmd = message_list[0]
+        if (cmd == "IAMAT"):
+            await self.handle_i_am_at(writer, message_list, message)
+        elif (cmd == "WHATSAT"):
+            await self.handle_whats_at(writer, message_list, message)
+        elif (cmd == "AT"):
+            await self.handle_at(writer, message_list, message)
+        else:
+            await self.write_to_client(writer, '? ' + message)
         
-        sendback_message = await self.parse_message(message)
-        if (sendback_message != ''):
-            print("{} SEND: {} TO CLIENT".format(self.name, sendback_message))
-            self.log.write("{} SEND: {} TO CLIENT\n".format(self.name, sendback_message))
-            self.log.flush()
-            writer.write(sendback_message.encode())
-            await writer.drain()
-
-        print("close the client socket")
-        writer.close()
     
     async def run_forever(self):
         server = await asyncio.start_server(self.handle_message, self.ip, self.port)
